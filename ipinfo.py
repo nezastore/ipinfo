@@ -1,108 +1,126 @@
-import os
+import logging
 import json
 import requests
-import sqlite3
-from telegram import Update, Bot
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+import asyncio
+import base64
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
-# Ganti dengan token bot Telegram Anda
+# Konfigurasi Bot Telegram
 TOKEN = "7672001478:AAGKmw_FixFyqe4zADaifTc94hVqcW5uvOw"
-DB_FILE = "ip_database.db"
-API_URL = "https://ipwho.is/{}"
+IP_API_URL = "https://ipwho.is/{}"  # API untuk cek IP
+DB_FILE = "ip_database.json"
 
-# Inisialisasi database
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS ip_data (
-            ip TEXT PRIMARY KEY,
-            country TEXT,
-            region TEXT,
-            city TEXT,
-            isp TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
+# Konfigurasi GitHub
+GITHUB_TOKEN = "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"
+GITHUB_REPO = "nezastore/ipinfo"
+GITHUB_FILE_PATH = "ip_database.json"
 
-# Fungsi untuk mengecek apakah IP valid
-def is_valid_ip(ip):
-    parts = ip.split(".")
-    if len(parts) != 4:
-        return False
+# Logging
+logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
+
+def load_ip_database():
+    """Load database IP dari file JSON"""
     try:
-        return all(0 <= int(part) <= 255 for part in parts)
-    except ValueError:
-        return False
+        with open(DB_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
 
-# Fungsi untuk mendapatkan informasi IP dari ipwho.is
-def get_ip_info(ip):
-    response = requests.get(API_URL.format(ip))
+def update_github_file(data):
+    """Upload atau update file JSON ke GitHub"""
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+
+    # Ambil SHA file jika sudah ada
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        sha = response.json()["sha"]
+    else:
+        sha = None
+
+    # Encode data JSON ke Base64
+    encoded_content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
+
+    # Payload untuk update ke GitHub
+    payload = {
+        "message": "Update IP Database",
+        "content": encoded_content,
+        "sha": sha
+    }
+
+    # Kirim request untuk update
+    update_response = requests.put(url, headers=headers, json=payload)
+    return update_response.status_code == 200
+
+def save_ip_database(data):
+    """Simpan database ke file lokal dan update ke GitHub"""
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+    
+    # Update file di GitHub
+    if update_github_file(data):
+        logging.info("✅ Database berhasil diperbarui di GitHub")
+    else:
+        logging.error("❌ Gagal memperbarui database di GitHub")
+
+def lookup_ip(ip):
+    """Mencari informasi tentang IP menggunakan API"""
+    response = requests.get(IP_API_URL.format(ip))
     if response.status_code == 200:
         data = response.json()
         if data.get("success"):
             return {
-                "country": data.get("country"),
-                "region": data.get("region"),
-                "city": data.get("city"),
-                "isp": data.get("isp")
+                "ip": ip,
+                "country": data.get("country", "Tidak diketahui"),
+                "region": data.get("region", "Tidak diketahui"),
+                "city": data.get("city", "Tidak diketahui"),
+                "isp": data.get("isp", "Tidak diketahui"),
+                "org": data.get("org", "Tidak tersedia"),
+                "lat": data.get("latitude"),
+                "lon": data.get("longitude"),
             }
     return None
 
-# Fungsi untuk menyimpan IP ke database
-def save_ip(ip, info):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO ip_data (ip, country, region, city, isp) VALUES (?, ?, ?, ?, ?)",
-                   (ip, info["country"], info["region"], info["city"], info["isp"]))
-    conn.commit()
-    conn.close()
+async def start(update: Update, context: CallbackContext):
+    await update.message.reply_text("Selamat datang! Kirimkan alamat IP untuk mendapatkan informasi.")
 
-# Fungsi untuk mengecek apakah IP sudah ada di database
-def check_ip(ip):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM ip_data WHERE ip = ?", (ip,))
-    result = cursor.fetchone()
-    conn.close()
-    return result
+async def check_ip(update: Update, context: CallbackContext):
+    user_input = update.message.text.strip()
+    ip_db = load_ip_database()
 
-# Fungsi untuk menangani pesan pengguna
-def handle_message(update: Update, context: CallbackContext):
-    ip = update.message.text.strip()
-    if not is_valid_ip(ip):
-        update.message.reply_text("⚠️ Format IP tidak valid. Harap masukkan IP yang benar.")
-        return
-    
-    existing_ip = check_ip(ip)
-    if existing_ip:
-        update.message.reply_text(f"⚠️ IP {ip} sudah digunakan untuk Linode.")
+    if user_input in ip_db:
+        await update.message.reply_text(f"⚠️ IP {user_input} sudah pernah digunakan sebelumnya.")
     else:
-        info = get_ip_info(ip)
-        if info:
-            save_ip(ip, info)
-            update.message.reply_text(
-                f"✅ IP {ip} telah disimpan!\n\n🌍 Lokasi: {info['city']}, {info['region']}, {info['country']}\n🏢 ISP: {info['isp']}"
+        ip_info = lookup_ip(user_input)
+        if ip_info:
+            ip_db[user_input] = ip_info  # Simpan ke database
+            save_ip_database(ip_db)
+
+            google_maps_link = f"https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']}"
+            keyboard = [[InlineKeyboardButton("🗺 Lihat di Google Maps", url=google_maps_link)]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            message = (
+                f"🔍 **Hasil Pencarian IP:**\n"
+                f"📍 **IP:** `{ip_info['ip']}`\n"
+                f"🌍 **Negara:** {ip_info['country']}\n"
+                f"🏙 **Wilayah:** {ip_info['region']}\n"
+                f"🏡 **Kota:** {ip_info['city']}\n"
+                f"📡 **ISP:** {ip_info['isp']}\n"
+                f"🏢 **Organisasi:** {ip_info['org']}\n"
+                f"📌 **Latitude:** {ip_info['lat']}, **Longitude:** {ip_info['lon']}\n"
             )
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="Markdown")
         else:
-            update.message.reply_text("⚠️ Gagal mengambil data IP. Coba lagi nanti.")
+            await update.message.reply_text("❌ Gagal mengambil informasi IP. Coba lagi nanti.")
 
-# Fungsi untuk memulai bot
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Halo! Kirimkan IP yang ingin Anda cek.")
-
-# Main function
-def main():
-    init_db()
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
-    
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    
-    updater.start_polling()
-    updater.idle()
+async def main():
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_ip))
+    print("✅ Bot berjalan...")
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
