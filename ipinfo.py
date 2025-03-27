@@ -1,4 +1,5 @@
 import logging
+import base64  # Tambahkan ini
 import json
 import requests
 import asyncio
