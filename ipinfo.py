@@ -2,9 +2,12 @@ import logging
 import json
 import requests
 import asyncio
-import base64
+import nest_asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+
+# Memperbaiki event loop
+nest_asyncio.apply()
 
 # Konfigurasi Bot Telegram
 TOKEN = "7672001478:AAGKmw_FixFyqe4zADaifTc94hVqcW5uvOw"
