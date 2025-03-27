@@ -1,5 +1,5 @@
 import logging
-import base64  # Tambahkan ini
+import base64
 import json
 import requests
 import asyncio
@@ -12,7 +12,7 @@ nest_asyncio.apply()
 
 # Konfigurasi Bot Telegram
 TOKEN = "7672001478:AAGKmw_FixFyqe4zADaifTc94hVqcW5uvOw"
-IP_API_URL = "https://ipwho.is/{}"  # API untuk cek IP
+IP_API_URL = "https://ipwho.is/{}"
 DB_FILE = "ip_database.json"
 
 # Konfigurasi GitHub
@@ -24,52 +24,33 @@ GITHUB_FILE_PATH = "ip_database.json"
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 def load_ip_database():
-    """Load database IP dari file JSON"""
     try:
         with open(DB_FILE, "r") as f:
             return json.load(f)
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 def update_github_file(data):
-    """Upload atau update file JSON ke GitHub"""
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
 
-    # Ambil SHA file jika sudah ada
     response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        sha = response.json()["sha"]
-    else:
-        sha = None
+    sha = response.json().get("sha") if response.status_code == 200 else None
 
-    # Encode data JSON ke Base64
     encoded_content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
-
-    # Payload untuk update ke GitHub
-    payload = {
-        "message": "Update IP Database",
-        "content": encoded_content,
-        "sha": sha
-    }
-
-    # Kirim request untuk update
+    payload = {"message": "Update IP Database", "content": encoded_content, "sha": sha}
     update_response = requests.put(url, headers=headers, json=payload)
     return update_response.status_code == 200
 
 def save_ip_database(data):
-    """Simpan database ke file lokal dan update ke GitHub"""
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
-    
-    # Update file di GitHub
     if update_github_file(data):
         logging.info("✅ Database berhasil diperbarui di GitHub")
     else:
         logging.error("❌ Gagal memperbarui database di GitHub")
 
 def lookup_ip(ip):
-    """Mencari informasi tentang IP menggunakan API"""
     response = requests.get(IP_API_URL.format(ip))
     if response.status_code == 200:
         data = response.json()
@@ -79,11 +60,12 @@ def lookup_ip(ip):
                 "country": data.get("country", "Tidak diketahui"),
                 "region": data.get("region", "Tidak diketahui"),
                 "city": data.get("city", "Tidak diketahui"),
-                "isp": data.get("isp", "Tidak diketahui"),
+                "isp": data.get("isp", "Tidak tersedia"),
                 "org": data.get("org", "Tidak tersedia"),
                 "lat": data.get("latitude"),
                 "lon": data.get("longitude"),
             }
+    logging.error(f"❌ Gagal mengambil data IP: {ip}")
     return None
 
 async def start(update: Update, context: CallbackContext):
@@ -98,9 +80,8 @@ async def check_ip(update: Update, context: CallbackContext):
     else:
         ip_info = lookup_ip(user_input)
         if ip_info:
-            ip_db[user_input] = ip_info  # Simpan ke database
+            ip_db[user_input] = ip_info
             save_ip_database(ip_db)
-
             google_maps_link = f"https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']}"
             keyboard = [[InlineKeyboardButton("🗺 Lihat di Google Maps", url=google_maps_link)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
