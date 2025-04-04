@@ -16,7 +16,7 @@ IP_API_URL = "https://ipwho.is/{}"
 DB_FILE = "ip_database.json"
 
 # Konfigurasi GitHub
-GITHUB_TOKEN = "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"  # Ganti dengan token GitHub yang valid
+GITHUB_TOKEN = "ghp_YOUR_GITHUB_TOKEN"  # Ganti dengan token GitHub yang valid
 GITHUB_REPO = "nezastore/ipinfo"
 GITHUB_FILE_PATH = "ip_database.json"
 
@@ -43,48 +43,28 @@ def save_ip_database(data):
         logging.error(f"❌ Gagal menyimpan database lokal: {e}")
 
 
+def get_file_sha():
+    """Mengambil SHA file yang ada di GitHub"""
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+    headers = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json().get("sha")
+    return None
+
+
 def update_github_file(data):
     """Upload atau update file JSON ke GitHub"""
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-
-    # Ambil SHA file jika sudah ada
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
-        sha = response.json().get("sha")
-    elif response.status_code == 404:
-        sha = None  # File belum ada, buat baru
-    else:
-        logging.error(f"❌ Gagal mengakses GitHub API: {response.json()}")
-        return False
-
-    # Encode data JSON ke Base64
-    try:
-        encoded_content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
-    except Exception as e:
-        logging.error(f"⚠️ Gagal encode JSON: {e}")
-        return False
-
-    # Payload untuk update ke GitHub
-    payload = {
-        "message": "Update IP Database",
-        "content": encoded_content,
-        "sha": sha
-    }
-
-    # Kirim request untuk update
-    update_response = requests.put(url, headers=headers, json=payload)
-    
-    if update_response.status_code in [200, 201]:
+    headers = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    encoded_content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
+    sha = get_file_sha()
+    payload = {"message": "Update IP Database", "content": encoded_content, "sha": sha}
+    response = requests.put(url, headers=headers, json=payload)
+    if response.status_code in [200, 201]:
         logging.info("✅ Database berhasil diperbarui di GitHub")
-        return True
     else:
-        logging.error(f"❌ Gagal memperbarui database di GitHub: {update_response.json()}")
-        return False
+        logging.error(f"❌ Gagal update GitHub: {response.json()}")
 
 
 def lookup_ip(ip):
@@ -107,28 +87,23 @@ def lookup_ip(ip):
 
 
 async def start(update: Update, context: CallbackContext):
-    """Menjalankan command /start"""
     await update.message.reply_text("Selamat datang! Kirimkan alamat IP untuk mendapatkan informasi.")
 
 
 async def check_ip(update: Update, context: CallbackContext):
-    """Mengecek apakah IP sudah ada di database atau belum"""
     user_input = update.message.text.strip()
     ip_db = load_ip_database()
-
     if user_input in ip_db:
-        await update.message.reply_text(f"⚠️ IP {user_input} sudah pernah digunakan sebelumnya.")
+        await update.message.reply_text(f"⚠️ IP {user_input} sudah pernah digunakan.")
     else:
         ip_info = lookup_ip(user_input)
         if ip_info:
             ip_db[user_input] = ip_info
-            save_ip_database(ip_db)  # Simpan database lokal
-            update_github_file(ip_db)  # Update ke GitHub otomatis
-            
+            save_ip_database(ip_db)
+            update_github_file(ip_db)
             google_maps_link = f"https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']}"
             keyboard = [[InlineKeyboardButton("🗺 Lihat di Google Maps", url=google_maps_link)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-
             message = (
                 f"🔍 **Hasil Pencarian IP:**\n"
                 f"📍 **IP:** `{ip_info['ip']}`\n"
@@ -145,7 +120,6 @@ async def check_ip(update: Update, context: CallbackContext):
 
 
 async def main():
-    """Menjalankan bot Telegram"""
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_ip))
