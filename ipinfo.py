@@ -19,7 +19,7 @@ IP_API_URL = "https://ipwho.is/{}"
 
 # Konfigurasi Google Sheets
 SPREADSHEET_ID = "1GrxbYHdXzcdFna"
-GOOGLE_CREDENTIALS_FILE = "google-credentials.json"
+GOOGLE_CREDENTIALS_FILE = "dataiplinode-1df59f53d098.json"
 
 # Logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
