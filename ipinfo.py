@@ -46,19 +46,18 @@ def save_ip_database(data):
 def update_github_file(data):
     """Upload atau update file JSON ke GitHub"""
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-headers = {
-    "Authorization": f"token {GITHUB_TOKEN}",
-    "Accept": "application/vnd.github.v3+json"
-}
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
 
     # Ambil SHA file jika sudah ada
-response = requests.get(url, headers=headers)
-
+    response = requests.get(url, headers=headers)
     sha = response.json().get("sha") if response.status_code == 200 else None
 
     # Encode data JSON ke Base64
     try:
-sha = response.json().get("sha") if response.status_code == 200 else None
+        encoded_content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
     except Exception as e:
         logging.error(f"⚠️ Gagal encode JSON: {e}")
         return False
