@@ -16,7 +16,7 @@ IP_API_URL = "https://ipwho.is/{}"
 DB_FILE = "ip_database.json"
 
 # Konfigurasi GitHub
-GITHUB_TOKEN = "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"
+GITHUB_TOKEN = "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"  # Ganti dengan token GitHub yang valid
 GITHUB_REPO = "nezastore/ipinfo"
 GITHUB_FILE_PATH = "ip_database.json"
 
@@ -53,7 +53,14 @@ def update_github_file(data):
 
     # Ambil SHA file jika sudah ada
     response = requests.get(url, headers=headers)
-    sha = response.json().get("sha") if response.status_code == 200 else None
+    
+    if response.status_code == 200:
+        sha = response.json().get("sha")
+    elif response.status_code == 404:
+        sha = None  # File belum ada, buat baru
+    else:
+        logging.error(f"❌ Gagal mengakses GitHub API: {response.json()}")
+        return False
 
     # Encode data JSON ke Base64
     try:
