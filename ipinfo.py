@@ -71,7 +71,8 @@ async def check_ip(update: Update, context: CallbackContext):
     
     # Cek apakah IP sudah ada di database
     if is_ip_in_sheet(user_input):
-        return  # Tidak menampilkan pesan apapun jika IP sudah tersimpan
+        await update.message.reply_text(f"⚠️ *IP {user_input} sudah pernah digunakan!*", parse_mode="Markdown")
+        return  # Hentikan eksekusi lebih lanjut jika IP sudah tersimpan
     
     ip_info = lookup_ip(user_input)
     
