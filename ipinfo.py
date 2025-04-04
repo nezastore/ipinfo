@@ -23,24 +23,37 @@ GITHUB_FILE_PATH = "ip_database.json"
 # Logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
+
 def load_ip_database():
+    """Memuat database IP dari file lokal"""
     try:
         with open(DB_FILE, "r") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
+
+def save_ip_database(data):
+    """Menyimpan database IP ke file lokal"""
+    try:
+        with open(DB_FILE, "w") as f:
+            json.dump(data, f, indent=4)
+        logging.info("✅ Database lokal berhasil diperbarui")
+    except Exception as e:
+        logging.error(f"❌ Gagal menyimpan database lokal: {e}")
+
+
 def update_github_file(data):
     """Upload atau update file JSON ke GitHub"""
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
 
     # Ambil SHA file jika sudah ada
     response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        sha = response.json().get("sha")
-    else:
-        sha = None
+    sha = response.json().get("sha") if response.status_code == 200 else None
 
     # Encode data JSON ke Base64
     try:
@@ -59,17 +72,40 @@ def update_github_file(data):
     # Kirim request untuk update
     update_response = requests.put(url, headers=headers, json=payload)
     
-    if update_response.status_code == 200:
+    if update_response.status_code in [200, 201]:
         logging.info("✅ Database berhasil diperbarui di GitHub")
         return True
     else:
         logging.error(f"❌ Gagal memperbarui database di GitHub: {update_response.json()}")
         return False
 
+
+def lookup_ip(ip):
+    """Mencari informasi IP menggunakan IPWhois API"""
+    response = requests.get(IP_API_URL.format(ip))
+    if response.status_code == 200:
+        data = response.json()
+        if data.get("success"):
+            return {
+                "ip": data.get("ip"),
+                "country": data.get("country"),
+                "region": data.get("region"),
+                "city": data.get("city"),
+                "isp": data.get("isp"),
+                "org": data.get("org"),
+                "lat": data.get("latitude"),
+                "lon": data.get("longitude")
+            }
+    return None
+
+
 async def start(update: Update, context: CallbackContext):
+    """Menjalankan command /start"""
     await update.message.reply_text("Selamat datang! Kirimkan alamat IP untuk mendapatkan informasi.")
 
+
 async def check_ip(update: Update, context: CallbackContext):
+    """Mengecek apakah IP sudah ada di database atau belum"""
     user_input = update.message.text.strip()
     ip_db = load_ip_database()
 
@@ -79,7 +115,9 @@ async def check_ip(update: Update, context: CallbackContext):
         ip_info = lookup_ip(user_input)
         if ip_info:
             ip_db[user_input] = ip_info
-            save_ip_database(ip_db)
+            save_ip_database(ip_db)  # Simpan database lokal
+            update_github_file(ip_db)  # Update ke GitHub otomatis
+            
             google_maps_link = f"https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']}"
             keyboard = [[InlineKeyboardButton("🗺 Lihat di Google Maps", url=google_maps_link)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -98,12 +136,15 @@ async def check_ip(update: Update, context: CallbackContext):
         else:
             await update.message.reply_text("❌ Gagal mengambil informasi IP. Coba lagi nanti.")
 
+
 async def main():
+    """Menjalankan bot Telegram"""
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_ip))
-    print("✅ Bot berjalan...")
+    logging.info("✅ Bot berjalan...")
     await app.run_polling()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
