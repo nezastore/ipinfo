@@ -46,10 +46,10 @@ def save_ip_database(data):
 def update_github_file(data):
     """Upload atau update file JSON ke GitHub"""
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
+headers = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github.v3+json"
+}
 
     # Ambil SHA file jika sudah ada
     response = requests.get(url, headers=headers)
