@@ -8,31 +8,30 @@ from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
-# Memperbaiki event loop (hindari error di Jupyter / runtime async)
+# Fix event loop
 nest_asyncio.apply()
 
-# Konfigurasi Bot Telegram (API Token TIDAK diubah)
+# Token Bot Telegram
 TOKEN = "7672001478:AAGKmw_FixFyqe4zADaifTc94hVqcW5uvOw"
 
-# Konfigurasi API IP Lookup
+# API IP Lookup
 IP_API_URL = "https://ipwho.is/{}"
 
-# Konfigurasi Google Sheets
-SPREADSHEET_ID = "1GrxbYHdXzcdFna_-yywJXGNCPZHt__ug9PS9l2efKy8"
-GOOGLE_CREDENTIALS_FILE = "dataiplinode-1df59f53d098.json"
+# Google Sheets Configuration
+GOOGLE_CREDENTIALS_FILE = "dataiplinode-1df59f53d098.json"  # Pastikan file ini tersedia
+SPREADSHEET_ID = "1GrxbYHdXzcdFna_-yywJXGNCPZHt__ug9PS9l2efKy8"  # Ganti dengan Spreadsheet ID yang benar
 
-# Logging
-logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
-
-# Load kredensial Google Sheets
+# Setup Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_CREDENTIALS_FILE, scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key(SPREADSHEET_ID).sheet1  # Menggunakan sheet pertama
 
+# Logging
+logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 def lookup_ip(ip):
-    """Mencari informasi IP menggunakan IPWho API"""
+    """Mencari informasi IP menggunakan IPWhois API"""
     response = requests.get(IP_API_URL.format(ip))
     if response.status_code == 200:
         data = response.json()
@@ -49,50 +48,39 @@ def lookup_ip(ip):
             }
     return None
 
+def is_ip_in_sheet(ip):
+    """Cek apakah IP sudah ada di Google Sheets"""
+    ip_list = sheet.col_values(1)  # Ambil semua IP di kolom pertama
+    return ip in ip_list
 
-def load_ip_database():
-    """Memuat database IP dari Google Sheets"""
-    try:
-        data = sheet.get_all_records()
-        return {row["IP"]: row for row in data}
-    except Exception as e:
-        logging.error(f"❌ Gagal memuat database dari Google Sheets: {e}")
-        return {}
-
-
-def save_to_google_sheets(ip, data):
-    """Simpan data IP ke Google Sheets"""
-    try:
-        row = [ip, data["country"], data["region"], data["city"], data["isp"], data["lat"], data["lon"]]
-        sheet.append_row(row)
-        logging.info("✅ Data berhasil disimpan ke Google Sheets")
+def save_ip_to_sheet(ip_info):
+    """Simpan IP ke Google Sheets jika belum ada"""
+    if not is_ip_in_sheet(ip_info["ip"]):  # Cek apakah IP sudah ada
+        sheet.append_row([
+            ip_info["ip"], ip_info["country"], ip_info["region"], ip_info["city"],
+            ip_info["isp"], ip_info["org"], ip_info["lat"], ip_info["lon"]
+        ])
         return True
-    except Exception as e:
-        logging.error(f"❌ Gagal menyimpan data ke Google Sheets: {e}")
-        return False
-
+    return False  # Jika sudah ada, tidak menyimpan ulang
 
 async def start(update: Update, context: CallbackContext):
-    """Menjalankan command /start"""
-    await update.message.reply_text("🚀 Selamat datang! Kirimkan alamat IP untuk mendapatkan informasi.")
-
+    await update.message.reply_text("Selamat datang! Kirimkan alamat IP untuk mendapatkan informasi.")
 
 async def check_ip(update: Update, context: CallbackContext):
-    """Mengecek apakah IP valid dan menyimpan ke Google Sheets"""
     user_input = update.message.text.strip()
-    ip_db = load_ip_database()
-
-    if user_input in ip_db:
-        await update.message.reply_text(f"⚠️ IP {user_input} sudah pernah digunakan.")
-    else:
-        ip_info = lookup_ip(user_input)
-        if ip_info:
-            saved = save_to_google_sheets(user_input, ip_info)
-            
+    
+    # Cek apakah IP sudah ada di database
+    if is_ip_in_sheet(user_input):
+        return  # Tidak menampilkan pesan apapun jika IP sudah tersimpan
+    
+    ip_info = lookup_ip(user_input)
+    
+    if ip_info:
+        success = save_ip_to_sheet(ip_info)
+        if success:
             google_maps_link = f"https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']}"
-            keyboard = [[InlineKeyboardButton("📍 Lihat di Google Maps", url=google_maps_link)]]
+            keyboard = [[InlineKeyboardButton("🗺 Lihat di Google Maps", url=google_maps_link)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-
             message = (
                 f"🔍 **Hasil Pencarian IP:**\n"
                 f"📍 **IP:** `{ip_info['ip']}`\n"
@@ -100,22 +88,17 @@ async def check_ip(update: Update, context: CallbackContext):
                 f"🏙 **Wilayah:** {ip_info['region']}\n"
                 f"🏡 **Kota:** {ip_info['city']}\n"
                 f"📡 **ISP:** {ip_info['isp']}\n"
+                f"🏢 **Organisasi:** {ip_info['org']}\n"
                 f"📌 **Latitude:** {ip_info['lat']}, **Longitude:** {ip_info['lon']}\n"
-                f"✅ **Data {'berhasil' if saved else 'gagal'} disimpan ke Google Sheets**"
             )
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="Markdown")
-        else:
-            await update.message.reply_text("❌ Gagal mengambil informasi IP. Pastikan format benar.")
-
 
 async def main():
-    """Menjalankan bot Telegram"""
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_ip))
     logging.info("✅ Bot berjalan...")
     await app.run_polling()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
