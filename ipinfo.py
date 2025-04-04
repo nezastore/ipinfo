@@ -16,7 +16,7 @@ IP_API_URL = "https://ipwho.is/{}"
 DB_FILE = "ip_database.json"
 
 # Konfigurasi GitHub
-GITHUB_TOKEN = "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"
+GITHUB_TOKEN = "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"
 GITHUB_REPO = "nezastore/ipinfo"
 GITHUB_FILE_PATH = "ip_database.json"
 
@@ -31,42 +31,40 @@ def load_ip_database():
         return {}
 
 def update_github_file(data):
+    """Upload atau update file JSON ke GitHub"""
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
 
+    # Ambil SHA file jika sudah ada
     response = requests.get(url, headers=headers)
-    sha = response.json().get("sha") if response.status_code == 200 else None
-
-    encoded_content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
-    payload = {"message": "Update IP Database", "content": encoded_content, "sha": sha}
-    update_response = requests.put(url, headers=headers, json=payload)
-    return update_response.status_code == 200
-
-def save_ip_database(data):
-    with open(DB_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-    if update_github_file(data):
-        logging.info("✅ Database berhasil diperbarui di GitHub")
-    else:
-        logging.error("❌ Gagal memperbarui database di GitHub")
-
-def lookup_ip(ip):
-    response = requests.get(IP_API_URL.format(ip))
     if response.status_code == 200:
-        data = response.json()
-        if data.get("success"):
-            return {
-                "ip": ip,
-                "country": data.get("country", "Tidak diketahui"),
-                "region": data.get("region", "Tidak diketahui"),
-                "city": data.get("city", "Tidak diketahui"),
-                "isp": data.get("isp", "Tidak tersedia"),
-                "org": data.get("org", "Tidak tersedia"),
-                "lat": data.get("latitude"),
-                "lon": data.get("longitude"),
-            }
-    logging.error(f"❌ Gagal mengambil data IP: {ip}")
-    return None
+        sha = response.json().get("sha")
+    else:
+        sha = None
+
+    # Encode data JSON ke Base64
+    try:
+        encoded_content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
+    except Exception as e:
+        logging.error(f"⚠️ Gagal encode JSON: {e}")
+        return False
+
+    # Payload untuk update ke GitHub
+    payload = {
+        "message": "Update IP Database",
+        "content": encoded_content,
+        "sha": sha
+    }
+
+    # Kirim request untuk update
+    update_response = requests.put(url, headers=headers, json=payload)
+    
+    if update_response.status_code == 200:
+        logging.info("✅ Database berhasil diperbarui di GitHub")
+        return True
+    else:
+        logging.error(f"❌ Gagal memperbarui database di GitHub: {update_response.json()}")
+        return False
 
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text("Selamat datang! Kirimkan alamat IP untuk mendapatkan informasi.")
