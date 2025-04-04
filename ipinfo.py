@@ -17,7 +17,7 @@ DB_FILE = "ip_database.json"
 
 # Konfigurasi GitHub
 GITHUB_TOKEN = "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"
-GITHUB_REPO = "nezastore/ipinfo"
+GITHUB_REPO = "ipinfo"
 GITHUB_FILE_PATH = "ip_database.json"
 
 # Logging
