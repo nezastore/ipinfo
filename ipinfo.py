@@ -16,7 +16,7 @@ IP_API_URL = "https://ipwho.is/{}"
 DB_FILE = "ip_database.json"
 
 # Konfigurasi GitHub
-GITHUB_TOKEN = "ghp_YOUR_GITHUB_TOKEN"  # Ganti dengan token GitHub yang valid
+GITHUB_TOKEN = "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"  # Ganti dengan token GitHub yang valid
 GITHUB_REPO = "nezastore/ipinfo"
 GITHUB_FILE_PATH = "ip_database.json"
 
