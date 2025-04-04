@@ -18,7 +18,7 @@ TOKEN = "7672001478:AAGKmw_FixFyqe4zADaifTc94hVqcW5uvOw"
 IP_API_URL = "https://ipwho.is/{}"
 
 # Konfigurasi Google Sheets
-SPREADSHEET_ID = "1GrxbYHdXzcdFna"
+SPREADSHEET_ID = "1GrxbYHdXzcdFna_-yywJXGNCPZHt__ug9PS9l2efKy8"
 GOOGLE_CREDENTIALS_FILE = "dataiplinode-1df59f53d098.json"
 
 # Logging
