@@ -58,7 +58,7 @@ response = requests.get(url, headers=headers)
 
     # Encode data JSON ke Base64
     try:
-        encoded_content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
+encoded_content = base64.b64encode(json.dumps(data, indent=4).encode()).decode()
     except Exception as e:
         logging.error(f"⚠️ Gagal encode JSON: {e}")
         return False
