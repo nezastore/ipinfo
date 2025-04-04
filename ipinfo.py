@@ -52,7 +52,8 @@ headers = {
 }
 
     # Ambil SHA file jika sudah ada
-    response = requests.get(url, headers=headers)
+response = requests.get(url, headers=headers)
+
     sha = response.json().get("sha") if response.status_code == 200 else None
 
     # Encode data JSON ke Base64
