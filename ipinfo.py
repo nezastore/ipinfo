@@ -17,7 +17,7 @@ TOKEN = "7672001478:AAGKmw_FixFyqe4zADaifTc94hVqcW5uvOw"
 
 # API IP Lookup
 IP_API_URL = "https://ipwho.is/{}"
-IP_BLACKLIST_URL = "https://blacklistapi.com/api/v1/{}"  # Contoh URL untuk pengecekan blacklist
+IP_BLACKLIST_URL = "https://ipinfo.io/{}/json"  # Menggunakan ipinfo.io untuk pengecekan IP
 
 # Google Sheets Configuration
 GOOGLE_CREDENTIALS_FILE = "dataiplinode-1df59f53d098.json"  # Pastikan file ini tersedia
@@ -60,13 +60,19 @@ async def lookup_ip(ip):
     return None
 
 async def check_blacklist(ip):
-    """Cek apakah IP ada dalam daftar hitam (blacklist)"""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(IP_BLACKLIST_URL.format(ip)) as response:
-            if response.status == 200:
-                data = await response.json()
-                # Misalnya kalau data "blacklisted" true, berarti IP di blacklist
-                return data.get("blacklisted", False)
+    """Cek apakah IP ada dalam daftar hitam (blacklist) menggunakan ipinfo.io"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(IP_BLACKLIST_URL.format(ip)) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # Jika ada informasi tentang IP yang terdaftar sebagai "bogon" atau IP yang tidak valid
+                    if data.get("bogon"):
+                        return True
+    except aiohttp.ClientConnectorError:
+        logging.error("Gagal terhubung ke server untuk mengecek blacklist.")
+    except Exception as e:
+        logging.error(f"Terjadi error saat cek blacklist: {e}")
     return False
 
 def is_ip_in_sheet(ip):
