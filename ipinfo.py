@@ -17,7 +17,7 @@ TOKEN = "7672001478:AAGKmw_FixFyqe4zADaifTc94hVqcW5uvOw"
 
 # API IP Lookup
 IP_API_URL = "https://ipwho.is/{}"
-IP_BLACKLIST_URL = "https://ipinfo.io/{}/json"  # Menggunakan ipinfo.io untuk pengecekan IP
+API_KEY = "973b89e4eb21f60647c699db51c7d960f1b90b1e4a683783c0f33f74547b4479b855e3eb5e3dbf92"  # Ganti dengan API Key kamu dari AbuseIPDB
 
 # Google Sheets Configuration
 GOOGLE_CREDENTIALS_FILE = "dataiplinode-1df59f53d098.json"  # Pastikan file ini tersedia
@@ -60,17 +60,22 @@ async def lookup_ip(ip):
     return None
 
 async def check_blacklist(ip):
-    """Cek apakah IP ada dalam daftar hitam (blacklist) menggunakan ipinfo.io"""
+    """Cek apakah IP ada dalam daftar hitam (blacklist) menggunakan AbuseIPDB"""
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(IP_BLACKLIST_URL.format(ip)) as response:
+            url = f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}"
+            headers = {
+                'Key': API_KEY,
+                'Accept': 'application/json'
+            }
+            async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
-                    # Jika ada informasi tentang IP yang terdaftar sebagai "bogon" atau IP yang tidak valid
-                    if data.get("bogon"):
+                    # Cek apakah ada indikasi IP terlibat dalam aktivitas buruk
+                    if data['data']['abuseConfidenceScore'] > 50:  # Ambil nilai confidence > 50
                         return True
     except aiohttp.ClientConnectorError:
-        logging.error("Gagal terhubung ke server untuk mengecek blacklist.")
+        logging.error("Gagal terhubung ke server AbuseIPDB.")
     except Exception as e:
         logging.error(f"Terjadi error saat cek blacklist: {e}")
     return False
