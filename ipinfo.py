@@ -59,6 +59,19 @@ async def lookup_ip(ip):
                     }
     return None
 
+async def lookup_ip_info(ip):
+    """Mencari informasi tambahan menggunakan IPInfo.io"""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"https://ipinfo.io/{ip}/json") as response:
+            if response.status == 200:
+                data = await response.json()
+                return {
+                    "hostname": data.get("hostname", "Unknown"),
+                    "location": data.get("loc", "Unknown"),
+                    "org": data.get("org", "Unknown")
+                }
+    return None
+
 async def check_blacklist(ip):
     """Cek apakah IP ada dalam daftar hitam (blacklist) menggunakan AbuseIPDB"""
     try:
@@ -88,7 +101,7 @@ def is_ip_in_sheet(ip):
 def save_ip_to_sheet(ip_info):
     """Simpan IP ke Google Sheets jika belum ada"""
     if not is_ip_in_sheet(ip_info["ip"]):  # Cek apakah IP sudah ada
-        sheet.append_row([
+        sheet.append_row([ 
             ip_info["ip"], ip_info["country"], ip_info["region"], ip_info["city"],
             ip_info["isp"], ip_info["org"], ip_info["lat"], ip_info["lon"]
         ])
@@ -122,6 +135,11 @@ async def check_ip(update: Update, context: CallbackContext):
             await update.message.reply_text(f"⚠️ *IP {user_input} terdeteksi sebagai IP yang diblacklist!*")
             return
         
+        # Ambil informasi tambahan dari ipinfo.io
+        ipinfo_data = await lookup_ip_info(user_input)
+        if ipinfo_data:
+            ip_info.update(ipinfo_data)  # Menambahkan data dari ipinfo.io
+
         success = save_ip_to_sheet(ip_info)
         if success:
             google_maps_link = f"https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']}"
@@ -135,6 +153,8 @@ async def check_ip(update: Update, context: CallbackContext):
                 f"🏡 **Kota:** {ip_info['city']}\n"
                 f"📡 **ISP:** {ip_info['isp']}\n"
                 f"🏢 **Organisasi:** {ip_info['org']}\n"
+                f"🌍 **Lokasi:** {ip_info['location']}\n"
+                f"🔎 **Hostname:** {ip_info['hostname']}\n"
                 f"📌 **Latitude:** {ip_info['lat']}, **Longitude:** {ip_info['lon']}\n"
             )
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="Markdown")
