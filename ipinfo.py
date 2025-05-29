@@ -20,7 +20,7 @@ IP_API_URL = "https://ipwho.is/{}"
 API_KEY = "973b89e4eb21f60647c699db51c7d960f1b90b1e4a683783c0f33f74547b4479b855e3eb5e3dbf92"  # Ganti dengan API Key kamu dari AbuseIPDB
 
 # Google Sheets Configuration
-GOOGLE_CREDENTIALS_FILE = "dataiplinode-acdf604f102e.json"  # Pastikan file ini tersedia
+GOOGLE_CREDENTIALS_FILE = "dataiplinode-1df59f53d098.json"  # Pastikan file ini tersedia
 SPREADSHEET_ID = "1GrxbYHdXzcdFna_-yywJXGNCPZHt__ug9PS9l2efKy8"  # Ganti dengan Spreadsheet ID yang benar
 
 # Setup Google Sheets
